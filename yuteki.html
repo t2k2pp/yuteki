@@ -175,7 +175,18 @@
         <div class="glass-panel rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center border border-white/20 transform scale-95 transition-transform duration-500" id="clear-card">
             <div id="clear-badge" class="text-xs uppercase tracking-widest text-sky-300 font-bold mb-1">Harmony Achieved</div>
             <h2 id="clear-title" class="text-2xl sm:text-3xl font-bold text-white mb-2">見事な調和です</h2>
-            <p id="clear-desc" class="text-sm text-slate-300 mb-6">すべての色油が美しくひとつにまとまりました。</p>
+            <p id="clear-desc" class="text-sm text-slate-300 mb-4">すべての色油が美しくひとつにまとまりました。</p>
+            <div class="bg-slate-900/50 rounded-xl p-3 mb-5 border border-white/10 flex justify-around">
+                <div>
+                    <div class="text-[11px] text-slate-400 font-medium uppercase tracking-wider">Total Score</div>
+                    <div id="modal-score" class="text-xl font-bold text-amber-300">0</div>
+                </div>
+                <div class="w-[1px] bg-white/10"></div>
+                <div>
+                    <div class="text-[11px] text-slate-400 font-medium uppercase tracking-wider">High Score</div>
+                    <div id="modal-highscore" class="text-xl font-bold text-sky-300">0</div>
+                </div>
+            </div>
             <button id="btn-next" class="btn-interactive pointer-events-auto w-full py-3 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-sm tracking-wider border border-white/25">
                 次の水面へ進む
             </button>
@@ -689,6 +700,38 @@ class SparkleParticle {
     }
 }
 
+// --- 水面に浮かび上がるスコア・ポップアップ演出テキスト ---
+class FloatingText {
+    constructor(text, x, y, color = '#fcd34d', size = 16) {
+        this.text = text;
+        this.x = x;
+        this.y = y;
+        this.vy = -1.1;
+        this.alpha = 1.0;
+        this.color = color;
+        this.size = size;
+    }
+
+    update() {
+        this.y += this.vy;
+        this.alpha -= 0.02;
+    }
+
+    draw(ctx) {
+        if (this.alpha <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.font = `bold ${this.size}px 'Zen Kaku Gothic New', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = this.color;
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+    }
+}
+
 // --- メインゲーム管理クラス ---
 class YutekiGame {
     constructor() {
@@ -702,6 +745,11 @@ class YutekiGame {
         this.blobs = [];
         this.ripples = [];
         this.sparkles = [];
+        this.floatingTexts = [];
+
+        // スコアシステム
+        this.score = 0;
+        this.highScore = parseInt(localStorage.getItem('yuteki_highscore') || '0', 10);
 
         // ゲーム進行状態
         this.level = 1;
@@ -765,6 +813,8 @@ class YutekiGame {
         this.clearBadge = document.getElementById('clear-badge');
         this.clearTitle = document.getElementById('clear-title');
         this.clearDesc = document.getElementById('clear-desc');
+        this.modalScoreEl = document.getElementById('modal-score');
+        this.modalHighScoreEl = document.getElementById('modal-highscore');
 
         document.getElementById('btn-start').addEventListener('click', () => {
             this.audio.init();
@@ -1097,6 +1147,12 @@ class YutekiGame {
 
         this.ripples.push(new WaterRipple((ax + bx) * 0.5, (ay + by) * 0.5, 45));
         this.audio.playSplit();
+
+        // 引っ張りすぎてちぎれた場合のマイナススコア（無限稼ぎ防止）
+        if (!this.isBonusMode) {
+            this.addScore(-60, (ax + bx) * 0.5, (ay + by) * 0.5, '-60 分裂', '#f87171', 14);
+        }
+
         this.updateHUDIndicators();
     }
 
@@ -1145,6 +1201,14 @@ class YutekiGame {
                 this.blobs.push(b2);
                 this.ripples.push(new WaterRipple(cx, cy, b.R * 1.8));
                 this.audio.playSplit();
+
+                // 分割時のスコア処理
+                if (!this.isBonusMode) {
+                    this.addScore(-60, cx, cy, '-60 分裂', '#f87171', 14);
+                } else {
+                    this.addScore(30, cx, cy, '+30 粉砕!', '#34d399', 15);
+                }
+
                 this.updateHUDIndicators();
                 break; // 1フレームにつき1回分割で負荷と過剰分割を抑える
             }
@@ -1281,6 +1345,19 @@ class YutekiGame {
         this.audio.playMerge(totalArea);
         this.blobs.splice(idx2, 1);
 
+        // 合体時のスコア加算（非操作色の自発・連鎖合体は高得点「連鎖調和」ボーナス！）
+        const grabbed = this.pointer.grabbedBlob;
+        const isSelfGrabbed = (grabbed && (grabbed === b1 || grabbed === b2));
+        const isOtherGrabbed = (grabbed && grabbed !== b1 && grabbed !== b2);
+
+        if (!this.isBonusMode) {
+            if (isOtherGrabbed) {
+                this.addScore(250, midX, midY, '+250 連鎖調和! ✨', '#38bdf8', 18);
+            } else {
+                this.addScore(50, midX, midY, '+50 調和', '#fcd34d', 14);
+            }
+        }
+
         this.updateHUDIndicators();
         this.checkStageClear();
     }
@@ -1333,6 +1410,21 @@ class YutekiGame {
             : `あと ${totalExtraDrops} 回の結合`;
     }
 
+    // スコア加算・減算処理（ポップアップ演出付き）
+    addScore(delta, x, y, text = null, color = '#fcd34d', size = 16) {
+        this.score = Math.max(0, this.score + delta);
+        if (this.score > this.highScore) {
+            this.highScore = this.score;
+            try { localStorage.setItem('yuteki_highscore', this.highScore.toString()); } catch (e) {}
+        }
+        if (this.scoreNumEl) {
+            this.scoreNumEl.textContent = this.score.toLocaleString();
+        }
+        if (text && x !== undefined && y !== undefined) {
+            this.floatingTexts.push(new FloatingText(text, x, y, color, size));
+        }
+    }
+
     // 通常ステージのクリア判定（各色が1つずつになったらクリア）
     checkStageClear() {
         if (this.stageCleared || this.isBonusMode || !this.gameStarted) return;
@@ -1349,6 +1441,10 @@ class YutekiGame {
             this.pointer.grabbedBlob.grabbedEnd = null;
             this.pointer.grabbedBlob = null;
         }
+
+        // ステージクリア基本得点
+        const clearBonus = 1000 + this.level * 200;
+        this.addScore(clearBonus, this.width * 0.5, this.height * 0.45, `+${clearBonus} Stage Clear!`, '#38bdf8', 22);
 
         setTimeout(() => {
             this.audio.playClearChord();
@@ -1367,6 +1463,8 @@ class YutekiGame {
         this.clearBadge.textContent = badge;
         this.clearTitle.textContent = title;
         this.clearDesc.textContent = desc;
+        if (this.modalScoreEl) this.modalScoreEl.textContent = this.score.toLocaleString();
+        if (this.modalHighScoreEl) this.modalHighScoreEl.textContent = this.highScore.toLocaleString();
         this.clearOverlay.classList.remove('opacity-0', 'pointer-events-none');
         this.clearCard.classList.remove('scale-95');
         this.clearCard.classList.add('scale-100');
@@ -1468,6 +1566,9 @@ class YutekiGame {
                 this.audio.playClearChord();
                 const count = this.blobs.length;
                 const achieved = count >= this.bonusTargetCount;
+                const bonusScore = achieved ? count * 50 : count * 20;
+                this.addScore(bonusScore, this.width * 0.5, this.height * 0.45, `+${bonusScore} Bonus Complete!`, '#fcd34d', 22);
+
                 this.showClearModal(
                     achieved ? 'Wonderful Splash!' : 'Refresh Complete!',
                     achieved ? `大成功！ ${count}滴に粉砕！` : `${count}滴に砕きました！`,
@@ -1503,6 +1604,14 @@ class YutekiGame {
             s.update();
             s.draw(this.ctx);
             if (s.alpha < 0.03) this.sparkles.splice(i, 1);
+        }
+
+        // 6.5 スコア・ポップアップテキストの更新と描画
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+            const ft = this.floatingTexts[i];
+            ft.update();
+            ft.draw(this.ctx);
+            if (ft.alpha <= 0) this.floatingTexts.splice(i, 1);
         }
 
         // 7. お箸カーソルの描画
