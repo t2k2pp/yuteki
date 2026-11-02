@@ -79,47 +79,57 @@
     <canvas id="water-canvas"></canvas>
 
     <!-- Top HUD -->
-    <div id="hud" class="fixed top-0 left-0 w-full p-3 sm:p-5 flex justify-between items-start pointer-events-none z-10 transition-opacity duration-500 opacity-0">
-        <!-- Left Info: Level & Mode -->
-        <div class="glass-panel rounded-2xl px-4 py-3 flex flex-col gap-1.5 pointer-events-auto">
-            <div class="flex items-center gap-2.5">
-                <span class="text-xs uppercase tracking-widest text-sky-300/80 font-medium">Level</span>
-                <span id="level-num" class="text-2xl font-bold text-white leading-none">1</span>
-                <span id="mode-badge" class="ml-1 text-[11px] px-2.5 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/30 text-sky-200 font-medium">
-                    調和・結合
-                </span>
+    <div id="hud" class="fixed top-0 left-0 w-full p-2 sm:p-4 flex flex-col gap-2 pointer-events-none z-10 transition-opacity duration-500 opacity-0" style="padding-top: max(0.5rem, env(safe-area-inset-top, 0.5rem));">
+        <!-- Top Row: Left Stats & Right Controls -->
+        <div class="flex justify-between items-start w-full gap-2">
+            <!-- Left Info: Level & Score & Mode -->
+            <div class="glass-panel rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 flex flex-col gap-1 pointer-events-auto shadow-md">
+                <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-[10px] sm:text-xs uppercase tracking-widest text-sky-300/80 font-medium">Lv</span>
+                        <span id="level-num" class="text-xl sm:text-2xl font-bold text-white leading-none">1</span>
+                    </div>
+                    <div class="h-3.5 w-[1px] bg-white/20"></div>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-[10px] sm:text-xs uppercase tracking-widest text-amber-300/80 font-medium">Score</span>
+                        <span id="score-num" class="text-base sm:text-lg font-bold text-amber-200 leading-none">0</span>
+                    </div>
+                    <span id="mode-badge" class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/30 text-sky-200 font-medium">
+                        調和・結合
+                    </span>
+                </div>
+                <div id="progress-wrapper" class="flex items-center gap-1.5 flex-wrap">
+                    <!-- Dynamic Color Dots for Remaining Oil Drops -->
+                    <div id="color-indicators" class="flex items-center gap-1 flex-wrap"></div>
+                    <span id="remaining-text" class="text-[11px] sm:text-xs text-slate-300">残り: 0滴</span>
+                </div>
             </div>
-            <div id="progress-wrapper" class="flex items-center gap-2 mt-0.5">
-                <!-- Dynamic Color Dots for Remaining Oil Drops -->
-                <div id="color-indicators" class="flex items-center gap-1.5"></div>
-                <span id="remaining-text" class="text-xs text-slate-300 ml-1">残り: 0滴</span>
+
+            <!-- Right Controls -->
+            <div class="flex items-center gap-1.5 sm:gap-2 pointer-events-auto flex-shrink-0">
+                <button id="btn-stir-Now" title="今すぐかき混ぜモード（気分転換）" class="glass-panel btn-interactive rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5 text-xs text-amber-200 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    <span class="hidden md:inline">かき混ぜたい</span>
+                </button>
+                <button id="btn-reset" title="配置をやり直す" class="glass-panel btn-interactive rounded-xl p-2 sm:p-2.5 text-slate-200">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </button>
+                <button id="btn-sound" title="サウンド切替" class="glass-panel btn-interactive rounded-xl p-2 sm:p-2.5 text-sky-300">
+                    <svg id="icon-sound-on" class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                    <svg id="icon-sound-off" class="w-4 h-4 sm:w-5 sm:h-5 hidden text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+                </button>
             </div>
         </div>
 
-        <!-- Center Bonus Timer / Notification -->
-        <div id="center-banner" class="hidden glass-panel rounded-2xl px-6 py-3 flex flex-col items-center glow-badge">
-            <div class="text-xs tracking-widest text-amber-300 font-bold uppercase">✨ ボーナスステージ：解放 ✨</div>
-            <div class="text-sm text-slate-200 mt-0.5">箸で素早くかき混ぜて、油を細かく砕こう！</div>
-            <div class="flex items-center gap-4 mt-1">
-                <div class="text-2xl font-bold text-white"><span id="bonus-timer">15.0</span><span class="text-xs font-normal text-slate-300 ml-1">秒</span></div>
-                <div class="h-4 w-[1px] bg-white/20"></div>
-                <div class="text-lg font-bold text-amber-300">砕いた数: <span id="bonus-count">0</span> <span class="text-xs font-normal text-slate-300">/ 目標 <span id="bonus-target">25</span></span></div>
+        <!-- Center Bonus Timer / Notification (Displayed in 2nd row for clear view on mobile) -->
+        <div id="center-banner" class="hidden self-center glass-panel rounded-2xl px-4 py-2 sm:px-6 sm:py-2.5 flex flex-col items-center glow-badge pointer-events-auto max-w-full">
+            <div class="text-[11px] sm:text-xs tracking-widest text-amber-300 font-bold uppercase">✨ ボーナスステージ：解放 ✨</div>
+            <div class="text-xs sm:text-sm text-slate-200 mt-0.5 text-center">箸で素早くかき混ぜて、油を細かく砕こう！</div>
+            <div class="flex items-center gap-3 sm:gap-4 mt-1">
+                <div class="text-xl sm:text-2xl font-bold text-white"><span id="bonus-timer">15.0</span><span class="text-xs font-normal text-slate-300 ml-1">秒</span></div>
+                <div class="h-3.5 w-[1px] bg-white/20"></div>
+                <div class="text-base sm:text-lg font-bold text-amber-300">砕いた数: <span id="bonus-count">0</span> <span class="text-xs font-normal text-slate-300">/ 目標 <span id="bonus-target">25</span></span></div>
             </div>
-        </div>
-
-        <!-- Right Controls -->
-        <div class="flex items-center gap-2 pointer-events-auto">
-            <button id="btn-stir-Now" title="今すぐかき混ぜモード（気分転換）" class="glass-panel btn-interactive rounded-xl px-3 py-2.5 text-xs sm:text-sm text-amber-200 flex items-center gap-1.5">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                <span class="hidden sm:inline">かき混ぜたい</span>
-            </button>
-            <button id="btn-reset" title="配置をやり直す" class="glass-panel btn-interactive rounded-xl p-2.5 text-slate-200">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-            </button>
-            <button id="btn-sound" title="サウンド切替" class="glass-panel btn-interactive rounded-xl p-2.5 text-sky-300">
-                <svg id="icon-sound-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
-                <svg id="icon-sound-off" class="w-5 h-5 hidden text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
-            </button>
         </div>
     </div>
 
@@ -739,6 +749,7 @@ class YutekiGame {
         this.bottomGuide = document.getElementById('bottom-guide');
         this.guideText = document.getElementById('guide-text');
         this.levelNumEl = document.getElementById('level-num');
+        this.scoreNumEl = document.getElementById('score-num');
         this.modeBadgeEl = document.getElementById('mode-badge');
         this.colorIndicatorsEl = document.getElementById('color-indicators');
         this.remainingTextEl = document.getElementById('remaining-text');
@@ -939,11 +950,18 @@ class YutekiGame {
     }
 
     getPlayBounds() {
+        let topBound = 88;
+        if (this.hud) {
+            const h = this.hud.offsetHeight;
+            if (h > 0) {
+                topBound = h + 14;
+            }
+        }
         return {
-            left: 16,
-            right: this.width - 16,
-            top: 90,
-            bottom: this.height - 54
+            left: 18,
+            right: this.width - 18,
+            top: topBound,
+            bottom: this.height - 52
         };
     }
 
