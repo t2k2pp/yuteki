@@ -6,5 +6,5 @@
 - [x] Task 4: スコアシステムの導入 (クリア得点、非操作色合体の連鎖調和ボーナス、分裂ペナルティ、HUD表示・ポップアップ)
 - [x] Task 5: ボーナスステージでの同色結合有効化といかに分裂させるかのゲーム性向上
 - [x] Task 6: 色別多骨格ノード物理演算と非真円性 (干渉による歪みと徐々な丸まり) の実装
-- [ ] Task 7: GitHub Pages対応 (index.html配置) とREADME.md作成 (Pagesリンク配置)
+- [x] Task 7: GitHub Pages対応 (index.html配置) とREADME.md作成 (Pagesリンク配置)
 - [ ] Task 8: 全体結合テスト・動作検証と最終確認
