@@ -159,6 +159,10 @@
                     <p><strong class="text-white">表面張力の心地よい反動。</strong><br>引っ張って離すと、ぷるんと元の丸い形に戻ろうとします。ちぎることもできます。</p>
                 </div>
                 <div class="flex items-start gap-2.5">
+                    <span class="text-emerald-400 font-bold">●</span>
+                    <p><strong class="text-white">色ごとの個性と油の粘性。</strong><br>色によって骨格数が異なり、生き生きと動きます。他の色の邪魔がなくなると、ゆっくり穏やかに丸へと還ります。</p>
+                </div>
+                <div class="flex items-start gap-2.5">
                     <span class="text-amber-400 font-bold">●</span>
                     <p><strong class="text-white">たまには無心にバラバラに。</strong><br>10ステージごとのボーナスや「かき混ぜたい」ボタンで、大きな油滴を思いっきり細かく砕けます。</p>
                 </div>
@@ -200,15 +204,15 @@
  * 水面上の色付き油滴を箸で伸ばして結合・分割する物理シミュレーション＆マインドフルネスゲーム
  */
 
-// --- カラーパレット定義（水面に映える美しい油の色） ---
+// --- カラーパレット定義（水面に映える美しい油の色 & 色ごとの骨格ノード数） ---
 const OIL_PALETTE = [
-    { name: '琥珀 (Amber)',   fill: '#f59e0b', glow: '#fcd34d', rim: '#fffbeb', dark: '#b45309' },
-    { name: '紅梅 (Rose)',    fill: '#f43f5e', glow: '#fda4af', rim: '#fff1f2', dark: '#be123c' },
-    { name: '翡翠 (Emerald)', fill: '#10b981', glow: '#6ee7b7', rim: '#ecfdf5', dark: '#047857' },
-    { name: '瑠璃 (Cyan)',    fill: '#06b6d4', glow: '#67e8f9', rim: '#ecfeff', dark: '#0e7490' },
-    { name: '藤紫 (Violet)',  fill: '#8b5cf6', glow: '#c4b5fd', rim: '#f5f3ff', dark: '#5b21b6' },
-    { name: '蜜柑 (Orange)',  fill: '#f97316', glow: '#fdba74', rim: '#fff7ed', dark: '#c2410c' },
-    { name: '若葉 (Lime)',    fill: '#84cc16', glow: '#bef264', rim: '#f7fee7', dark: '#4d7c0f' }
+    { name: '琥珀 (Amber)',   fill: '#f59e0b', glow: '#fcd34d', rim: '#fffbeb', dark: '#b45309', nodeCount: 2 }, // 2点骨格（伝統的長円・水滴）
+    { name: '紅梅 (Rose)',    fill: '#f43f5e', glow: '#fda4af', rim: '#fff1f2', dark: '#be123c', nodeCount: 3 }, // 3点骨格（三叉・三つ葉）
+    { name: '翡翠 (Emerald)', fill: '#10b981', glow: '#6ee7b7', rim: '#ecfdf5', dark: '#047857', nodeCount: 4 }, // 4点骨格（十字・四ツ葉）
+    { name: '瑠璃 (Cyan)',    fill: '#06b6d4', glow: '#67e8f9', rim: '#ecfeff', dark: '#0e7490', nodeCount: 5 }, // 5点骨格（星型・五葉アメーバ）
+    { name: '藤紫 (Violet)',  fill: '#8b5cf6', glow: '#c4b5fd', rim: '#f5f3ff', dark: '#5b21b6', nodeCount: 6 }, // 6点骨格（六角・高次粘性ブロブ）
+    { name: '蜜柑 (Orange)',  fill: '#f97316', glow: '#fdba74', rim: '#fff7ed', dark: '#c2410c', nodeCount: 4 }, // 4点骨格（非対称アメーバ）
+    { name: '若葉 (Lime)',    fill: '#84cc16', glow: '#bef264', rim: '#f7fee7', dark: '#4d7c0f', nodeCount: 5 }  // 5点骨格（多葉クローバー）
 ];
 
 // --- Web Audio API による心地よい水音・マインドフルネス音響システム ---
@@ -320,7 +324,7 @@ class ZenAudio {
     }
 }
 
-// --- 油滴クラス（2本の背骨ノード + 表面張力 + 弾性反動を持つ流体ブロブ） ---
+// --- 油滴クラス（色別の多骨格ノード + 表面張力・粘弾性 + 非真円性を持つ流体ブロブ） ---
 let NEXT_BLOB_ID = 1;
 
 class OilBlob {
@@ -328,20 +332,28 @@ class OilBlob {
         this.id = NEXT_BLOB_ID++;
         this.colorIndex = colorIndex;
         this.area = area;
-        // 面積から基本半径を算出: Area = pi * R^2
         this.updateRadiusFromArea();
 
-        // 油滴を「2つの連結した端点 A, B」として表現することで、
-        // お箸で自由な場所を引っ張ってビヨーンと伸ばし、離すと反動でぷるんと戻る挙動を実現
-        this.ax = x;
-        this.ay = y;
-        this.bx = x + 0.01;
-        this.by = y + 0.01;
+        const pal = OIL_PALETTE[colorIndex % OIL_PALETTE.length];
+        this.nodeCount = pal.nodeCount || 2;
 
-        this.vax = (Math.random() - 0.5) * 0.4;
-        this.vay = (Math.random() - 0.5) * 0.4;
-        this.vbx = this.vax;
-        this.vby = this.vay;
+        this.cx = x;
+        this.cy = y;
+
+        // 多骨格ノード群の初期化（色ごとに2〜6ノードの骨格を持つ）
+        this.nodes = [];
+        for (let i = 0; i < this.nodeCount; i++) {
+            const angle = (i / this.nodeCount) * Math.PI * 2;
+            const initOffset = (this.nodeCount === 2) ? 0.05 : (0.15 + Math.random() * 0.25) * this.R;
+            this.nodes.push({
+                x: x + Math.cos(angle) * initOffset,
+                y: y + Math.sin(angle) * initOffset,
+                vx: (Math.random() - 0.5) * 0.35,
+                vy: (Math.random() - 0.5) * 0.35,
+                baseAngle: angle,
+                restDist: initOffset
+            });
+        }
 
         // 表面のぷるぷる振動（Wobble）パラメータ
         this.wobbleAmp = 0;
@@ -349,48 +361,126 @@ class OilBlob {
         this.wobbleAngle = 0;
         this.phase = Math.random() * Math.PI * 2;
 
-        // どの端が掴まれているか ('a' | 'b' | null)
-        this.grabbedEnd = null;
+        this.grabbedNodeIndex = -1;
         this.mergeCooldown = 0;
+        this.isInterfered = false;
     }
 
     updateRadiusFromArea() {
         this.R = Math.sqrt(this.area / Math.PI);
     }
 
-    get centerX() { return (this.ax + this.bx) * 0.5; }
-    get centerY() { return (this.ay + this.by) * 0.5; }
+    // 後方互換アクセサ（2点骨格コードとの完全互換）
+    get ax() { return this.nodes[0] ? this.nodes[0].x : this.cx; }
+    set ax(v) { if (this.nodes[0]) this.nodes[0].x = v; }
+    get ay() { return this.nodes[0] ? this.nodes[0].y : this.cy; }
+    set ay(v) { if (this.nodes[0]) this.nodes[0].y = v; }
+
+    get bx() { return this.nodes[1] ? this.nodes[1].x : (this.nodes[0] ? this.nodes[0].x : this.cx); }
+    set bx(v) { if (this.nodes[1]) this.nodes[1].x = v; }
+    get by() { return this.nodes[1] ? this.nodes[1].y : (this.nodes[0] ? this.nodes[0].y : this.cy); }
+    set by(v) { if (this.nodes[1]) this.nodes[1].y = v; }
+
+    get vax() { return this.nodes[0] ? this.nodes[0].vx : 0; }
+    set vax(v) { if (this.nodes[0]) this.nodes[0].vx = v; }
+    get vay() { return this.nodes[0] ? this.nodes[0].vy : 0; }
+    set vay(v) { if (this.nodes[0]) this.nodes[0].vy = v; }
+
+    get vbx() { return this.nodes[1] ? this.nodes[1].vx : 0; }
+    set vbx(v) { if (this.nodes[1]) this.nodes[1].vx = v; }
+    get vby() { return this.nodes[1] ? this.nodes[1].vy : 0; }
+    set vby(v) { if (this.nodes[1]) this.nodes[1].vy = v; }
+
+    get centerX() {
+        let sum = 0;
+        for (const n of this.nodes) sum += n.x;
+        return sum / this.nodes.length;
+    }
+    get centerY() {
+        let sum = 0;
+        for (const n of this.nodes) sum += n.y;
+        return sum / this.nodes.length;
+    }
 
     get stretchLength() {
-        return Math.hypot(this.bx - this.ax, this.by - this.ay);
+        if (this.nodeCount === 2) {
+            return Math.hypot(this.bx - this.ax, this.by - this.ay);
+        }
+        let maxD = 0;
+        const cx = this.centerX, cy = this.centerY;
+        for (const n of this.nodes) {
+            const d = Math.hypot(n.x - cx, n.y - cy);
+            if (d > maxD) maxD = d;
+        }
+        return maxD * 2;
+    }
+
+    get grabbedEnd() {
+        if (this.grabbedNodeIndex === 0) return 'a';
+        if (this.grabbedNodeIndex === 1) return 'b';
+        return this.grabbedNodeIndex >= 0 ? this.grabbedNodeIndex : null;
+    }
+    set grabbedEnd(val) {
+        if (val === 'a') this.grabbedNodeIndex = 0;
+        else if (val === 'b') this.grabbedNodeIndex = 1;
+        else if (typeof val === 'number') this.grabbedNodeIndex = val;
+        else this.grabbedNodeIndex = -1;
     }
 
     // 伸ばされた油滴のくびれ具合や両端の半径を計算
     getShapeMetrics() {
         const L = this.stretchLength;
-        // 伸びるほど両端の球は少し小さくなり、中央の首（くびれ）が細くなる
         const endR = this.R / Math.sqrt(1 + (L / (this.R * 2.1)));
         const maxStretch = this.R * 3.8 + 26;
         const stretchRatio = Math.min(1, L / maxStretch);
-        // 引っ張られるほど中央がキュッとくびれる
         const waistRatio = Math.max(0.05, 1 - Math.pow(stretchRatio, 1.35) * 0.95);
         return { L, endR, stretchRatio, waistRatio, maxStretch };
     }
 
-    // 指定座標 (px, py) からこの油滴の骨格線分 AB への最短距離と位置パラメータ t (0〜1)
+    // 指定座標 (px, py) からこの油滴への最短距離と位置パラメータ t
     distanceToSegment(px, py) {
-        const dx = this.bx - this.ax;
-        const dy = this.by - this.ay;
-        const lenSq = dx * dx + dy * dy;
-        let t = 0.5;
-        if (lenSq > 0.0001) {
-            t = ((px - this.ax) * dx + (py - this.ay) * dy) / lenSq;
-            t = Math.max(0, Math.min(1, t));
+        if (this.nodeCount === 2) {
+            const dx = this.bx - this.ax;
+            const dy = this.by - this.ay;
+            const lenSq = dx * dx + dy * dy;
+            let t = 0.5;
+            if (lenSq > 0.0001) {
+                t = ((px - this.ax) * dx + (py - this.ay) * dy) / lenSq;
+                t = Math.max(0, Math.min(1, t));
+            }
+            const projX = this.ax + t * dx;
+            const projY = this.ay + t * dy;
+            const dist = Math.hypot(px - projX, py - projY);
+            return { dist, t, projX, projY, bestNodeIdx: t < 0.5 ? 0 : 1 };
         }
-        const projX = this.ax + t * dx;
-        const projY = this.ay + t * dy;
-        const dist = Math.hypot(px - projX, py - projY);
-        return { dist, t, projX, projY };
+
+        let minDist = Infinity;
+        let bestNodeIdx = 0;
+        let bestProjX = this.centerX;
+        let bestProjY = this.centerY;
+        const cx = this.centerX, cy = this.centerY;
+
+        for (let i = 0; i < this.nodes.length; i++) {
+            const n = this.nodes[i];
+            const dx = n.x - cx;
+            const dy = n.y - cy;
+            const lenSq = dx * dx + dy * dy;
+            let t = 0.5;
+            if (lenSq > 0.0001) {
+                t = ((px - cx) * dx + (py - cy) * dy) / lenSq;
+                t = Math.max(0, Math.min(1, t));
+            }
+            const projX = cx + t * dx;
+            const projY = cy + t * dy;
+            const d = Math.hypot(px - projX, py - projY);
+            if (d < minDist) {
+                minDist = d;
+                bestNodeIdx = i;
+                bestProjX = projX;
+                bestProjY = projY;
+            }
+        }
+        return { dist: minDist, t: 0.5, projX: bestProjX, projY: bestProjY, bestNodeIdx };
     }
 
     // 物理ステップ更新
@@ -398,145 +488,180 @@ class OilBlob {
         if (this.mergeCooldown > 0) this.mergeCooldown -= dt;
         this.phase += dt * 2.5;
 
-        const dx = this.bx - this.ax;
-        const dy = this.by - this.ay;
-        const L = Math.hypot(dx, dy);
+        const cx = this.centerX;
+        const cy = this.centerY;
+        const isGrabbedAny = this.grabbedNodeIndex >= 0;
 
-        // 1. 表面張力による収縮バネ（離すと反動で元の丸に戻る力）
-        if (L > 0.001) {
-            const nx = dx / L;
-            const ny = dy / L;
-            // 掴んでいる最中は伸ばしやすく、手を離した瞬間強い表面張力でプルンと戻る
-            const tensionK = this.grabbedEnd ? 0.032 : 0.145;
-            const force = L * tensionK;
+        // 1. 各骨格ノードの力学更新
+        for (let i = 0; i < this.nodes.length; i++) {
+            const n = this.nodes[i];
+            const isThisGrabbed = (this.grabbedNodeIndex === i);
 
-            if (this.grabbedEnd === 'b') {
-                // Bをお箸で引っ張っているとき、Aも少しだけついてくる（油全体の粘性）
-                const followFactor = Math.max(0, (L - this.R * 0.85)) * 0.018;
-                this.vax += nx * followFactor;
-                this.vay += ny * followFactor;
-                // BにはAへ戻ろうとする張力がかかる
-                this.vbx -= nx * force * 0.45;
-                this.vby -= ny * force * 0.45;
-            } else if (this.grabbedEnd === 'a') {
-                const followFactor = Math.max(0, (L - this.R * 0.85)) * 0.018;
-                this.vbx -= nx * followFactor;
-                this.vby -= ny * followFactor;
-                this.vax += nx * force * 0.45;
-                this.vay += ny * force * 0.45;
-            } else {
-                // 離しているときは両端が互いに強く引き合い、反動でぷるんと振動する
-                this.vax += nx * force;
-                this.vay += ny * force;
-                this.vbx -= nx * force;
-                this.vby -= ny * force;
+            const dx = n.x - cx;
+            const dy = n.y - cy;
+            const currentDist = Math.hypot(dx, dy);
+
+            // 表面張力バネ（中心への収縮力）
+            if (currentDist > 0.001) {
+                const nx = dx / currentDist;
+                const ny = dy / currentDist;
+
+                const tensionK = isThisGrabbed ? 0.032 : 0.14;
+                const stretch = currentDist - (isThisGrabbed ? 0 : n.restDist * 0.25);
+                const force = stretch * tensionK;
+
+                if (isThisGrabbed) {
+                    n.vx -= nx * force * 0.45;
+                    n.vy -= ny * force * 0.45;
+                    for (let j = 0; j < this.nodes.length; j++) {
+                        if (j !== i) {
+                            this.nodes[j].vx += nx * force * 0.15;
+                            this.nodes[j].vy += ny * force * 0.15;
+                        }
+                    }
+                } else {
+                    n.vx -= nx * force;
+                    n.vy -= ny * force;
+                }
             }
+
+            // ★ 非真円性（まん丸にならない場合と、徐々に丸くなる場合）の物理演算
+            if (!this.isInterfered && !isGrabbedAny) {
+                // 他の色が邪魔しておらず、触っていない静寂状態:
+                // 微弱な表面張力緩和により、時間をかけて穏やかに真円へと丸くなっていく
+                const relaxSpeed = Math.max(0.004, 0.024 - (this.R * 0.0002));
+                n.restDist += (0 - n.restDist) * relaxSpeed;
+            } else if (this.isInterfered) {
+                // 他の色が邪魔している（周囲に存在して斥力を受けている）場合:
+                // 歪みが固定され、真円にならず押しつぶされた形を保つ
+                n.restDist = Math.max(n.restDist, currentDist * 0.82);
+            }
+
+            // 水面のゆらぎ（微小な自然対流ドラフト）
+            const driftX = Math.sin(this.phase + this.id + i * 1.3) * 0.018;
+            const driftY = Math.cos(this.phase * 0.8 + this.id + i * 1.3) * 0.018;
+            n.vx += driftX;
+            n.vy += driftY;
+
+            // 水の粘性抵抗（ダンピング）
+            const damping = isThisGrabbed ? 0.86 : 0.90;
+            n.vx *= damping;
+            n.vy *= damping;
+
+            // 位置更新
+            n.x += n.vx;
+            n.y += n.vy;
+
+            // 境界反発
+            const margin = (this.R / Math.sqrt(Math.max(2, this.nodeCount))) + 14;
+            this.constrainNode(n, bounds, margin);
         }
 
-        // 2. 水面のゆらぎ（微かな自然対流）
-        const driftX = Math.sin(this.phase + this.id) * 0.018;
-        const driftY = Math.cos(this.phase * 0.8 + this.id) * 0.018;
-        this.vax += driftX;
-        this.vay += driftY;
-        this.vbx += driftX;
-        this.vby += driftY;
+        // 干渉フラグのリセット
+        this.isInterfered = false;
 
-        // 3. 水の粘性抵抗（ダンピング）
-        const damping = this.grabbedEnd ? 0.86 : 0.90;
-        this.vax *= damping;
-        this.vay *= damping;
-        this.vbx *= damping;
-        this.vby *= damping;
-
-        // 位置の更新
-        this.ax += this.vax;
-        this.ay += this.vay;
-        this.bx += this.vbx;
-        this.by += this.vby;
-
-        // 4. ぷるぷる表面振動（Wobble）の減衰バネ
+        // ぷるぷる振動の減衰バネ
         const wobbleK = 0.18;
         const wobbleDamp = 0.88;
         this.wobbleVel += -this.wobbleAmp * wobbleK;
         this.wobbleVel *= wobbleDamp;
         this.wobbleAmp += this.wobbleVel;
-
-        // 5. 容器（画面端）の境界反発
-        const margin = this.R + 14;
-        this.constrainPoint('a', bounds, margin);
-        this.constrainPoint('b', bounds, margin);
     }
 
-    constrainPoint(pt, bounds, margin) {
-        let x = pt === 'a' ? this.ax : this.bx;
-        let y = pt === 'a' ? this.ay : this.by;
-        let vx = pt === 'a' ? this.vax : this.vbx;
-        let vy = pt === 'a' ? this.vay : this.vby;
-
-        if (x < bounds.left + margin) {
-            x = bounds.left + margin;
-            vx = Math.abs(vx) * 0.6;
-        } else if (x > bounds.right - margin) {
-            x = bounds.right - margin;
-            vx = -Math.abs(vx) * 0.6;
+    constrainNode(node, bounds, margin) {
+        if (node.x < bounds.left + margin) {
+            node.x = bounds.left + margin;
+            node.vx = Math.abs(node.vx) * 0.6;
+        } else if (node.x > bounds.right - margin) {
+            node.x = bounds.right - margin;
+            node.vx = -Math.abs(node.vx) * 0.6;
         }
 
-        if (y < bounds.top + margin) {
-            y = bounds.top + margin;
-            vy = Math.abs(vy) * 0.6;
-        } else if (y > bounds.bottom - margin) {
-            y = bounds.bottom - margin;
-            vy = -Math.abs(vy) * 0.6;
-        }
-
-        if (pt === 'a') {
-            this.ax = x; this.ay = y; this.vax = vx; this.vay = vy;
-        } else {
-            this.bx = x; this.by = y; this.vbx = vx; this.vby = vy;
+        if (node.y < bounds.top + margin) {
+            node.y = bounds.top + margin;
+            node.vy = Math.abs(node.vy) * 0.6;
+        } else if (node.y > bounds.bottom - margin) {
+            node.y = bounds.bottom - margin;
+            node.vy = -Math.abs(node.vy) * 0.6;
         }
     }
 
-    // 24点の滑らかな閉曲線ポリゴン頂点を生成（花生型・アメーバ型・円形をシームレスに表現）
-    getContourPoints(numSamples = 28) {
-        const { L, endR, waistRatio } = this.getShapeMetrics();
+    // 滑らかな閉曲線ポリゴン頂点を生成（色ごとの骨格数に応じて有機的な形状を描画）
+    getContourPoints(numSamples = 32) {
         const cx = this.centerX;
         const cy = this.centerY;
 
-        let dirAngle = this.wobbleAngle;
-        if (L > 0.5) {
-            dirAngle = Math.atan2(this.by - this.ay, this.bx - this.ax);
-            this.wobbleAngle = dirAngle;
+        if (this.nodeCount === 2) {
+            const { L, endR, waistRatio } = this.getShapeMetrics();
+            let dirAngle = this.wobbleAngle;
+            if (L > 0.5) {
+                dirAngle = Math.atan2(this.by - this.ay, this.bx - this.ax);
+                this.wobbleAngle = dirAngle;
+            }
+            const cosA = Math.cos(dirAngle);
+            const sinA = Math.sin(dirAngle);
+            const halfL = L * 0.5;
+            const points = [];
+
+            for (let i = 0; i < numSamples; i++) {
+                const theta = (i / numSamples) * Math.PI * 2;
+                const cosT = Math.cos(theta);
+                const sinT = Math.sin(theta);
+                const localX = cosT * (halfL + endR);
+                const pinchFactor = 1 - (1 - waistRatio) * Math.pow(Math.sin(theta), 2);
+                const localRadiusY = endR * pinchFactor;
+                const ripple = 1
+                    + Math.cos(theta * 2) * this.wobbleAmp * 0.22
+                    + Math.sin(theta * 3 + this.phase) * 0.018;
+
+                const lx = localX * (1 - this.wobbleAmp * 0.08);
+                const ly = sinT * localRadiusY * ripple;
+                const wx = cx + lx * cosA - ly * sinA;
+                const wy = cy + lx * sinA + ly * cosA;
+                points.push({ x: wx, y: wy });
+            }
+            return points;
         }
 
-        const cosA = Math.cos(dirAngle);
-        const sinA = Math.sin(dirAngle);
-        const halfL = L * 0.5;
+        // --- 3骨格以上の多葉・アメーバ形状輪郭 ---
+        const N = this.nodes.length;
         const points = [];
+        const baseR = this.R;
 
         for (let i = 0; i < numSamples; i++) {
             const theta = (i / numSamples) * Math.PI * 2;
-            const cosT = Math.cos(theta);
-            const sinT = Math.sin(theta);
 
-            // 背骨に沿ったローカルX座標 (-halfL 〜 +halfL) + 端の丸み
-            const localX = cosT * (halfL + endR);
+            // 各骨格ノードがこの角度に及ぼす影響を合成
+            let rMod = 0;
+            let weightSum = 0;
 
-            // 中央 (cosT=0) 付近では waistRatio によってキュッとくびれる包絡線
-            const pinchFactor = 1 - (1 - waistRatio) * Math.pow(Math.sin(theta), 2);
-            let localRadiusY = endR * pinchFactor;
+            for (let k = 0; k < N; k++) {
+                const node = this.nodes[k];
+                const dx = node.x - cx;
+                const dy = node.y - cy;
+                const nodeDist = Math.hypot(dx, dy);
+                const nodeAngle = Math.atan2(dy, dx);
 
-            // 離した直後の「ぷるんっ」という楕円振動 + 微細な有機的ゆらぎ
-            const ripple = 1
-                + Math.cos(theta * 2) * this.wobbleAmp * 0.22
-                + Math.sin(theta * 3 + this.phase) * 0.018;
+                let diff = theta - nodeAngle;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
 
-            const lx = localX * (1 - this.wobbleAmp * 0.08);
-            const ly = sinT * localRadiusY * ripple;
+                const power = Math.max(0, Math.cos(diff));
+                const weight = Math.pow(power, 2.2);
+                rMod += (baseR * 0.72 + nodeDist * 0.88) * weight;
+                weightSum += weight;
+            }
 
-            // ワールド座標へ回転変換
-            const wx = cx + lx * cosA - ly * sinA;
-            const wy = cy + lx * sinA + ly * cosA;
-            points.push({ x: wx, y: wy });
+            const effectiveRadius = (weightSum > 0.001) ? (rMod / weightSum) : baseR;
+            const wobbleFactor = 1
+                + Math.cos(theta * N + this.wobbleAngle) * this.wobbleAmp * 0.18
+                + Math.sin(theta * 4 + this.phase) * 0.015;
+
+            const finalR = effectiveRadius * wobbleFactor;
+            points.push({
+                x: cx + Math.cos(theta) * finalR,
+                y: cy + Math.sin(theta) * finalR
+            });
         }
         return points;
     }
@@ -560,14 +685,14 @@ class OilBlob {
         ctx.closePath();
     }
 
-    // 水面に浮かぶリアルな油滴の描画（落影・屈折グラデーション・表面張力の輪郭ハイライト・光沢）
+    // 水面に浮かぶリアルな油滴の描画（落影・屈折グラデーション・輪郭ハイライト・光沢）
     draw(ctx) {
         const palette = OIL_PALETTE[this.colorIndex % OIL_PALETTE.length];
-        const pts = this.getContourPoints(28);
+        const pts = this.getContourPoints(32);
         const cx = this.centerX;
         const cy = this.centerY;
 
-        // 1. 水底への柔らかい落影（水面に浮いている立体感）
+        // 1. 水底への柔らかい落影
         ctx.save();
         ctx.translate(4, 7);
         this.traceSmoothPath(ctx, pts);
@@ -592,24 +717,27 @@ class OilBlob {
         ctx.globalAlpha = 0.88;
         ctx.fill();
 
-        // 3. 油と水の境界のメニスカス（表面張力による明るく輝く縁）
+        // 3. 境界のメニスカス（表面張力による輝く縁）
         ctx.lineWidth = 2.2;
         ctx.strokeStyle = palette.rim;
         ctx.globalAlpha = 0.65;
         ctx.stroke();
 
-        // 内側の淡い発光リング
         ctx.lineWidth = 4.5;
         ctx.strokeStyle = palette.glow;
         ctx.globalAlpha = 0.25;
         ctx.stroke();
         ctx.restore();
 
-        // 4. 両端のツヤ（水面上の油ならではの瑞々しいスペキュラーハイライト）
+        // 4. 各ノード先端の瑞々しいスペキュラーハイライト
         const { endR } = this.getShapeMetrics();
-        this.drawSpecularHighlight(ctx, this.ax, this.ay, endR);
-        if (this.stretchLength > endR * 0.9) {
-            this.drawSpecularHighlight(ctx, this.bx, this.by, endR * 0.85);
+        const highlightR = Math.max(5, endR * (this.nodeCount === 2 ? 0.9 : 0.65));
+
+        for (const n of this.nodes) {
+            this.drawSpecularHighlight(ctx, n.x, n.y, highlightR);
+        }
+        if (this.nodeCount > 2) {
+            this.drawSpecularHighlight(ctx, cx, cy, highlightR * 0.8);
         }
     }
 
@@ -881,28 +1009,23 @@ class YutekiGame {
             // タッチ位置にある油滴を探す
             let closestBlob = null;
             let minDist = Infinity;
-            let hitT = 0.5;
+            let hitNodeIdx = 0;
 
             for (const blob of this.blobs) {
-                const { dist, t } = blob.distanceToSegment(x, y);
-                if (dist <= blob.R * 1.15 + 12 && dist < minDist) {
+                const { dist, bestNodeIdx } = blob.distanceToSegment(x, y);
+                if (dist <= blob.R * 1.15 + 14 && dist < minDist) {
                     minDist = dist;
                     closestBlob = blob;
-                    hitT = t;
+                    hitNodeIdx = bestNodeIdx;
                 }
             }
 
             if (closestBlob) {
                 this.pointer.grabbedBlob = closestBlob;
-                // 近い方の端点を掴んで引っ張れるようにする
-                if (hitT < 0.5) {
-                    closestBlob.grabbedEnd = 'a';
-                    closestBlob.ax = x;
-                    closestBlob.ay = y;
-                } else {
-                    closestBlob.grabbedEnd = 'b';
-                    closestBlob.bx = x;
-                    closestBlob.by = y;
+                closestBlob.grabbedNodeIndex = hitNodeIdx;
+                if (closestBlob.nodes[hitNodeIdx]) {
+                    closestBlob.nodes[hitNodeIdx].x = x;
+                    closestBlob.nodes[hitNodeIdx].y = y;
                 }
                 this.audio.playTouchRipple();
             }
@@ -928,19 +1051,18 @@ class YutekiGame {
                 this.checkChopstickSlice(x, y, speed);
             }
 
-            // 2. 掴んでいる油滴の端点を引っ張る
+            // 2. 掴んでいる油滴の骨格ノードを引っ張る
             const grabbed = this.pointer.grabbedBlob;
             if (grabbed) {
-                if (grabbed.grabbedEnd === 'a') {
-                    grabbed.ax += (x - grabbed.ax) * 0.65;
-                    grabbed.ay += (y - grabbed.ay) * 0.65;
-                    grabbed.vax = this.pointer.vx * 0.3;
-                    grabbed.vay = this.pointer.vy * 0.3;
-                } else if (grabbed.grabbedEnd === 'b') {
-                    grabbed.bx += (x - grabbed.bx) * 0.65;
-                    grabbed.by += (y - grabbed.by) * 0.65;
-                    grabbed.vbx = this.pointer.vx * 0.3;
-                    grabbed.vby = this.pointer.vy * 0.3;
+                const gIdx = grabbed.grabbedNodeIndex;
+                if (gIdx >= 0 && grabbed.nodes[gIdx]) {
+                    const node = grabbed.nodes[gIdx];
+                    node.x += (x - node.x) * 0.65;
+                    node.y += (y - node.y) * 0.65;
+                    node.vx = this.pointer.vx * 0.3;
+                    node.vy = this.pointer.vy * 0.3;
+                    const cx = grabbed.centerX, cy = grabbed.centerY;
+                    node.restDist = Math.max(node.restDist, Math.hypot(node.x - cx, node.y - cy));
                 }
 
                 // 一定以上強く引っ張りすぎると「ぷちっ」と2つにちぎれる仕組み
@@ -963,7 +1085,7 @@ class YutekiGame {
                     b.wobbleAngle = Math.atan2(b.by - b.ay, b.bx - b.ax);
                     this.ripples.push(new WaterRipple(b.centerX, b.centerY, b.R * 2.1));
                 }
-                b.grabbedEnd = null;
+                b.grabbedNodeIndex = -1;
                 this.pointer.grabbedBlob = null;
             }
         };
@@ -1128,19 +1250,31 @@ class YutekiGame {
         // 元の油滴をA側半分にする
         blob.area = halfArea;
         blob.updateRadiusFromArea();
-        blob.bx = ax + (bx - ax) * 0.2;
-        blob.by = ay + (by - ay) * 0.2;
         blob.wobbleVel = 1.4;
-        blob.grabbedEnd = null;
+        blob.grabbedNodeIndex = -1;
         blob.mergeCooldown = 0.75; // ちぎれた直後にすぐ再結合しないクールダウン
+
+        // ノードの再構築
+        const NA = blob.nodeCount;
+        blob.nodes = [];
+        for (let k = 0; k < NA; k++) {
+            const angle = (k / NA) * Math.PI * 2;
+            const initOffset = (NA === 2) ? 0.05 : (0.15 + Math.random() * 0.2) * blob.R;
+            blob.nodes.push({
+                x: ax + Math.cos(angle) * initOffset,
+                y: ay + Math.sin(angle) * initOffset,
+                vx: blob.vax * 0.6,
+                vy: blob.vay * 0.6,
+                baseAngle: angle,
+                restDist: initOffset
+            });
+        }
 
         // 新しい油滴をB側半分として生成し、お箸で引き続き掴む
         const newBlob = new OilBlob(bx, by, halfArea, blob.colorIndex);
-        newBlob.ax = bx - (bx - ax) * 0.15;
-        newBlob.ay = by - (by - ay) * 0.15;
         newBlob.wobbleVel = 1.4;
         newBlob.mergeCooldown = 0.75;
-        newBlob.grabbedEnd = 'b';
+        newBlob.grabbedNodeIndex = (newBlob.nodeCount === 2 ? 1 : 0);
 
         this.blobs.push(newBlob);
         this.pointer.grabbedBlob = newBlob;
@@ -1181,14 +1315,23 @@ class YutekiGame {
 
                 b.area = area1;
                 b.updateRadiusFromArea();
-                b.ax = b.bx = cx + nx * sep;
-                b.ay = b.by = cy + ny * sep;
-                b.vax = nx * 3.2 + this.pointer.vx * 0.18;
-                b.vay = ny * 3.2 + this.pointer.vy * 0.18;
-                b.vbx = b.vax;
-                b.vby = b.vay;
                 b.wobbleVel = 1.3;
                 b.mergeCooldown = this.isBonusMode ? 0.9 : 0.85;
+
+                const b1Nodes = [];
+                for (let k = 0; k < b.nodeCount; k++) {
+                    const angle = (k / b.nodeCount) * Math.PI * 2;
+                    const offset = (b.nodeCount === 2 ? 0.05 : 0.15) * b.R;
+                    b1Nodes.push({
+                        x: cx + nx * sep + Math.cos(angle) * offset,
+                        y: cy + ny * sep + Math.sin(angle) * offset,
+                        vx: nx * 3.2 + this.pointer.vx * 0.18,
+                        vy: ny * 3.2 + this.pointer.vy * 0.18,
+                        baseAngle: angle,
+                        restDist: offset
+                    });
+                }
+                b.nodes = b1Nodes;
 
                 const b2 = new OilBlob(cx - nx * sep, cy - ny * sep, area2, b.colorIndex);
                 b2.vax = -nx * 3.2 + this.pointer.vx * 0.18;
@@ -1250,12 +1393,18 @@ class YutekiGame {
 
                 if (b1.colorIndex !== b2.colorIndex) {
                     // --- 異なる色の油：絶対に混ざらず、ぷるんと押し返し合う ---
-                    const minSep = sumR + 5;
+                    const minSep = sumR + 8;
+                    // 他の色が近くにいる場合、干渉フラグ（isInterfered）を立てて歪みを保持（丸くならない）
+                    if (minDist < minSep + 28) {
+                        b1.isInterfered = true;
+                        b2.isInterfered = true;
+                    }
+
                     if (minDist < minSep && minDist > 0.001) {
                         const overlap = minSep - minDist;
                         const nx = (bestPair.p2x - bestPair.p1x) / minDist;
                         const ny = (bestPair.p2y - bestPair.p1y) / minDist;
-                        const push = overlap * 0.14;
+                        const push = overlap * 0.15;
 
                         b1.vax -= nx * push;
                         b1.vay -= ny * push;
@@ -1309,32 +1458,43 @@ class YutekiGame {
         const w1 = b1.area / totalArea;
         const w2 = b2.area / totalArea;
 
-        // 融合後の両端をそれぞれの中心座標に設定することで、
-        // 合体した瞬間にビヨーンと繋がり、表面張力でぷるんと1つの円に収束するリアルな視覚効果を作る
-        b1.ax = b1.centerX;
-        b1.ay = b1.centerY;
-        b1.bx = b2.centerX;
-        b1.by = b2.centerY;
-
-        b1.vax = b1.vax * w1 + b2.vax * w2;
-        b1.vay = b1.vay * w1 + b2.vay * w2;
-        b1.vbx = b1.vbx * w1 + b2.vbx * w2;
-        b1.vby = b1.vby * w1 + b2.vby * w2;
+        const c1x = b1.centerX, c1y = b1.centerY;
+        const c2x = b2.centerX, c2y = b2.centerY;
+        const newCx = c1x * w1 + c2x * w2;
+        const newCy = c1y * w1 + c2y * w2;
+        const sepDist = Math.hypot(c2x - c1x, c2y - c1y) * 0.5;
 
         b1.area = totalArea;
         b1.updateRadiusFromArea();
         b1.wobbleVel = 1.35;
-        b1.wobbleAngle = Math.atan2(b1.by - b1.ay, b1.bx - b1.ax);
+        b1.wobbleAngle = Math.atan2(c2y - c1y, c2x - c1x);
+
+        // 合体後のノード群を色骨格数に応じて再構築（合体軸方向に伸びた形状からスタート）
+        const N = b1.nodeCount;
+        const mergedNodes = [];
+        for (let k = 0; k < N; k++) {
+            const angle = (k / N) * Math.PI * 2 + b1.wobbleAngle;
+            const stretch = (k === 0 || k === Math.floor(N / 2)) ? sepDist : sepDist * 0.35;
+            mergedNodes.push({
+                x: newCx + Math.cos(angle) * Math.max(0.1, stretch),
+                y: newCy + Math.sin(angle) * Math.max(0.1, stretch),
+                vx: b1.vax * w1 + b2.vax * w2,
+                vy: b1.vay * w1 + b2.vay * w2,
+                baseAngle: angle,
+                restDist: stretch
+            });
+        }
+        b1.nodes = mergedNodes;
 
         // もしb2を掴んでいた場合はb1へ引き継ぐ
         if (this.pointer.grabbedBlob === b2) {
             this.pointer.grabbedBlob = b1;
-            b1.grabbedEnd = 'b';
+            b1.grabbedNodeIndex = 1;
         }
 
         // 合体エフェクト（波紋＋キラキラ粒子＋水音）
-        const midX = (b1.ax + b1.bx) * 0.5;
-        const midY = (b1.ay + b1.by) * 0.5;
+        const midX = newCx;
+        const midY = newCy;
         const palette = OIL_PALETTE[b1.colorIndex % OIL_PALETTE.length];
 
         this.ripples.push(new WaterRipple(midX, midY, b1.R * 2.3, palette.glow));
